@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # Colors for output
 RED='\033[1;31m'
 GREEN='\033[1;32m'
@@ -8,24 +7,9 @@ CYAN='\033[1;36m'
 MAGENTA='\033[1;35m'
 NC='\033[0m' # No Color
 
-# Extended keyword groups for bug bounty reconnaissance
+# Subdomain keyword groups (example.com subdomains without domain suffix)
 declare -A KEYWORD_GROUPS
-
-KEYWORD_GROUPS["tokens"]="token|apikey|bearer|jwt|session|auth_token|access_token|refresh_token|oauth|signature|sig|auth"
-KEYWORD_GROUPS["passwords"]="password|passwd|pwd|secret|credential|passphrase|auth|pin|pwdhash|hash|keyphrase|pass"
-KEYWORD_GROUPS["admins"]="admin|root|user|login|superuser|administrator|sysadmin|manager|operator|owner|staff"
-KEYWORD_GROUPS["databases"]="db|database|sql|mysql|mongo|pgsql|postgres|redis|cassandra|oracle|sqlite|connection|connstr|dsn"
-KEYWORD_GROUPS["debug"]="debug|test|dev|staging|trace|verbose|beta|sandbox|mock|fake|dummy|trial|example|sample"
-KEYWORD_GROUPS["keys"]="key|apikey|secretkey|privatekey|publickey|sshkey|gpgkey|tokenkey|accesskey|secret_access_key|secret_key"
-KEYWORD_GROUPS["credentials"]="credential|username|user|userid|email|login|auth|pass|tokens|apikey|sessionid|cookie"
-KEYWORD_GROUPS["files"]="config|configfile|config.json|config.yaml|config.xml|backup|bak|old|save|archive|log|logfile|error.log|access.log"
-KEYWORD_GROUPS["network"]="ip|ipaddress|hostname|host|url|endpoint|port|proxy|vpn|firewall|cidr|subnet|gateway|dns|domain"
-KEYWORD_GROUPS["misc"]="cookie|sessions|csrf|jwt|oauth|nonce|signature|captcha|secret_token|auth_token|verification|otp|2fa|mfa"
-KEYWORD_GROUPS["payment"]="creditcard|ccnum|cardnumber|cvv|cvc|expiry|billing|invoice|transaction|paypal|stripe|payment|bank|account"
-KEYWORD_GROUPS["cloud"]="aws|azure|gcp|googlecloud|s3|bucket|iam|lambda|cloudfront|cloudtrail|kms|kmskey|secretmanager|vault|kms_key"
-
-# Corrected NEW group for sensitive file extensions and filenames with double backslashes
-KEYWORD_GROUPS["sensitive_files"]="\\.env|\\.env\\.backup|\\.env\\.bak|\\.gitignore|\\.htaccess|\\.htpasswd|\\.ssh/id_rsa|\\.pem|\\.key|\\.p12|\\.crt|\\.csr|\\.ovpn|\\.kdbx|\\.db|\\.sql|\\.sqlite|\\.log|\\.bak|\\.backup|\\.old|\\.save|\\.config|\\.zip|\\.tar\\.gz|\\.rar|\\.7z"
+KEYWORD_GROUPS["subdomains"]="admin|api|dev|staging|test|beta|internal|intranet|vpn|mail|webmail|portal|auth|login|sso|dashboard|cms|crm|static|uploads|git|ci|jenkins|db|logs|monitor|payments|support|root|legacy|dev-api|mobile-api|partner|review|qa|config|user|secure|debug|files|backup|adminpanel|controlpanel|shell|ssh|ftp|gitlab|gitbucket|github|bitbucket|svn|docker|k8s|kubernetes|qa-api|sandbox|bastion|proxy|mx|imap|pop3|smtp|api-v2|api-v1|analytics|admin-api|assets|auth-api|billing|cdn|chat|crm-api|docs|email|encryption|es|exchange|firewall|ftpserver|gateway|groups|help|influxdb|instance|inventory|jobs|kaiser|ldap|loadbalancer|logs-api|media|media-api|mgmt|mq|mx1|mx2|ns1|ns2|oauth2|ops|orchestration|payment-api|payments-api|plan|platform|portal-api|private|proxy-api|qa-panel|qa-dashboard|queue|rbac|redis|registry|release|remote|reports|resources|sandbox-api|search|secure-api|security|server|services|shell-ui|smtp-api|soap|sql|ssh-api|static-api|storage|svn-api|support-api|sync|test-api|tracking|tasks|uat|user-api|version|webhook|webapi|waf|workflow"
 
 # Usage/help function
 usage() {
@@ -37,8 +21,7 @@ usage() {
   echo -e "\n${CYAN}Custom keywords file format:${NC}"
   echo -e "  groupname: keyword1|keyword2|keyword3"
   echo -e "  Example:"
-  echo -e "    tokens: token|apikey|bearer"
-  echo -e "    passwords: password|secret|auth"
+  echo -e "    subdomains: admin|api|dev"
   exit 1
 }
 
@@ -54,12 +37,11 @@ while getopts ":f:k:o:h" opt; do
   esac
 done
 
-# Check input file
+# Validate input file
 if [[ -z "$INPUT_FILE" ]]; then
   echo -e "${RED}[!] Input file is required.${NC}"
   usage
 fi
-
 if [[ ! -f "$INPUT_FILE" ]] || [[ ! -s "$INPUT_FILE" ]]; then
   echo -e "${RED}[!] Input file does not exist or is empty.${NC}"
   exit 1
@@ -81,14 +63,14 @@ if [[ -n "$CUSTOM_KEYWORDS" ]]; then
   done < "$CUSTOM_KEYWORDS"
 fi
 
-# Prepare output
+# Prepare output redirection if specified
 exec 3>&1
 if [[ -n "$OUTPUT_FILE" ]]; then
   exec > "$OUTPUT_FILE"
   echo -e "${GREEN}[*] Output will be saved to $OUTPUT_FILE${NC}" >&3
 fi
 
-echo -e "${CYAN}========== Bug Bounty Sensitive Keyword Finder ==========${NC}"
+echo -e "${CYAN}========== Subdomain Keyword Finder ==========${NC}"
 echo -e "Scanning file: ${YELLOW}$INPUT_FILE${NC}"
 [[ -n "$CUSTOM_KEYWORDS" ]] && echo -e "Using custom keywords from: ${YELLOW}$CUSTOM_KEYWORDS${NC}"
 echo
@@ -97,13 +79,10 @@ echo
 total_matches=0
 for group in "${!KEYWORD_GROUPS[@]}"; do
   pattern="${KEYWORD_GROUPS[$group]}"
-  # Use grep with color, output line number and line
   matches=$(grep -Ein --color=always "$pattern" "$INPUT_FILE")
-
   count=$(echo "$matches" | grep -c .)
   if (( count > 0 )); then
     echo -e "${GREEN}[$group]${NC} (${count} matches):"
-    # Print matches with highlighted keywords
     echo -e "${matches}"
     echo
     total_matches=$((total_matches + count))
@@ -117,7 +96,7 @@ echo -e "${CYAN}========== Summary ==========${NC}"
 echo -e "Total matches found: ${YELLOW}$total_matches${NC}"
 echo -e "Scan complete."
 
-# Restore output if redirected
+# Restore stdout if redirected
 if [[ -n "$OUTPUT_FILE" ]]; then
   exec 1>&3
   echo -e "${GREEN}[*] Results saved to $OUTPUT_FILE${NC}"
